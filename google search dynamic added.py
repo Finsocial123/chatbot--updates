@@ -6,7 +6,6 @@ import logging
 import uuid
 import langid
 from typing import Tuple
-from dotenv import load_dotenv
 from agno.agent import Agent
 from agno.models.openai.like import OpenAILike
 from agno.storage.sqlite import SqliteStorage
@@ -18,27 +17,46 @@ from translator import LanguageTranslator, show_language_menu
 from tools.hackernewsarticles.hackernew import get_top_hackernews_stories
 from tools.SearchEngine.GotResults import main as search_engine_main
 
-# Load environment variables from .env file
+from dotenv import load_dotenv
 load_dotenv()
-
 # Configure logging
-log_level = getattr(logging, os.getenv('LOG_LEVEL', 'INFO'))
-logging.basicConfig(level=log_level)
+logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Load model configuration from environment variables
+# Your API key and base URL
+
 api_key = os.getenv('MODEL_API_KEY', 'sk-27185f30930a4613b26d90666082c23b')
 base_url = os.getenv('MODEL_BASE_URL', 'http://80.188.223.202:10101/v1')
 model_id = os.getenv('MODEL_ID', 'pawan941394/hind-ai:latest')
 
-# Feature flags from environment variables
-enable_reasoning = os.getenv('ENABLE_REASONING', 'true').lower() == 'true'
-enable_translation = os.getenv('ENABLE_TRANSLATION', 'true').lower() == 'true'
-show_tool_calls = os.getenv('SHOW_TOOL_CALLS', 'true').lower() == 'true'
-enable_search = os.getenv('ENABLE_SEARCH', '').lower() == 'true'  # Default to empty, will ask user
+# Set up a global flag for search preference
+search_enabled = False
 
-# Memory settings
-max_history_runs = int(os.getenv('MAX_HISTORY_RUNS', '15'))
+# Add a function to dynamically set the search preference
+def set_search_enabled(enable: bool = False) -> bool:
+    """
+    Set the search preference dynamically
+    
+    Args:
+        enable (bool): Whether to enable web search (default: False)
+        
+    Returns:
+        bool: The current search preference status
+    """
+    global search_enabled
+    search_enabled = enable
+    return search_enabled
+
+# Function to get user's search preference
+def get_search_preference():
+    """Get user's web search feature preference"""
+    while True:
+        choice = input("\nDo you want to enable web search features? (yes/no): ").lower().strip()
+        if choice in ['yes', 'y']:
+            return set_search_enabled(True)
+        elif choice in ['no', 'n']:
+            return set_search_enabled(False)
+        print("Please enter 'yes' or 'no'")
 
 # Import the reasoning module
 sys.path.append(os.path.join(os.path.dirname(__file__), 'tools', 'resioning'))
@@ -64,10 +82,10 @@ except ImportError:
     
     translator = DummyTranslator()
 
-# User language settings (load from environment if available)
+# User language settings (default to English)
 user_language = {
-    "code": os.getenv('DEFAULT_LANGUAGE_CODE', 'eng_Latn'),
-    "name": os.getenv('DEFAULT_LANGUAGE_NAME', 'English')
+    "code": "eng_Latn",
+    "name": "English"
 }
 
 def web_search(query: str) -> str:
@@ -657,12 +675,8 @@ def main():
     }
     print(f"\nSelected language: {lang_name}")
     
-    # Ask user if they want to enable Google search
-    global enable_search
-    search_prompt = "Do you want to enable Google search functionality? (yes/no): "
-    search_choice = input(search_prompt).strip().lower()
-    enable_search = search_choice == 'yes'
-    print(f"Google search enabled: {enable_search}")
+    # Get search preference from user
+    get_search_preference()
     
     # Chat ID handling - added from HindAI.py
     chat_id_inputs = input("Enter chat ID or press Enter to generate a new one: ").strip()
@@ -770,7 +784,7 @@ When responding to the user, use their preferred language: {user_language['name'
     # Create agent with explicitly configured memory system
     agent = Agent(
         model=OpenAILike(
-            id=model_id,
+            id='pawan941394/hind-ai:latest',
             api_key=api_key,
             base_url=base_url
         ),
@@ -779,16 +793,17 @@ When responding to the user, use their preferred language: {user_language['name'
         storage=storage,
         add_history_to_messages=True,
         # Set a higher number to ensure longer history is maintained
-        num_history_runs=max_history_runs,
+        num_history_runs=15,
         # Explicitly add system message about conversation memory
         system_message=system_message,
         # Set session_id directly in the agent constructor
         session_id=session_id,
         # Set user_id directly in the agent constructor
         user_id=user_id,
-        tools=[get_top_hackernews_stories,web_search] if enable_search else [get_top_hackernews_stories],
+        # Only include web_search tool if search is enabled
+        tools=[get_top_hackernews_stories] + ([web_search] if search_enabled else []),
         # Show tool calls in the Agent response
-        show_tool_calls=show_tool_calls,
+        show_tool_calls=True,
     )
     
     # Try to enable read_chat_history feature if available
