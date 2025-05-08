@@ -6,3 +6,7 @@ Idenity and Translation fixed in both the Thinking and the main output
 
 ## 06-05-2025.zip
   it's working fine all apis are created and done but google search not working with the api's
+
+## 08-05-2025.zip
+  Everything is working fine and this version we can host directly without any chanes
+  
